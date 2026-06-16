@@ -10,27 +10,65 @@ import traceback
 st.set_page_config(
     page_title="COD-ESTATE | 건축법규 검토",
     page_icon="⬛",
-    layout="centered",
+    layout="wide",
     initial_sidebar_state="collapsed",
 )
 
 # ── 전역 CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600&family=Noto+Sans+KR:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
 
+/* ── 기본 리셋 ── */
 html, body, [class*="css"] {
     font-family: 'Pretendard', 'Inter', 'Noto Sans KR', sans-serif;
     background: #ffffff;
     color: #0f0f0f;
 }
-
-/* 전체 폭 제한 + 중앙 정렬 */
 .stApp { background: #ffffff; }
+
+/* ── 전체 폭 840px 중앙 정렬 ── */
 .block-container {
-    max-width: 720px !important;
-    padding-left: 1.5rem !important;
-    padding-right: 1.5rem !important;
+    max-width: 840px !important;
+    margin-left: auto !important;
+    margin-right: auto !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+}
+
+/* ══════════════════════════════════════════
+   타이포그래피 3단계 계층
+   Tier 1 — 32px bold  (페이지 타이틀)
+   Tier 2 — 18px 600   (섹션·카테고리·라벨)
+   Tier 3 — 14px 400   (본문·데이터·안내)
+   워드마크 — 52px 700  (별도)
+══════════════════════════════════════════ */
+
+/* Tier 1 */
+.tier1-title {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #0f0f0f;
+    line-height: 1.2;
+}
+
+/* Tier 2 */
+.tier2-heading {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: #0f0f0f;
+    line-height: 1.4;
+}
+
+/* Tier 3 */
+.tier3-body {
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
+    color: #444;
+    line-height: 1.6;
 }
 
 /* ── 헤더 ── */
@@ -41,46 +79,57 @@ html, body, [class*="css"] {
 }
 .ce-wordmark {
     font-family: 'Inter', sans-serif;
-    font-size: 3.2rem;
-    font-weight: 600;
+    font-size: 52px;
+    font-weight: 700;
     letter-spacing: 0.12em;
     color: #0f0f0f;
     text-transform: uppercase;
     line-height: 1;
 }
 .ce-title {
-    font-family: 'Inter', 'Noto Sans KR', sans-serif;
-    font-size: 0.92rem;
+    font-size: 14px;
     font-weight: 300;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     color: #888;
-    margin-top: 0.55rem;
+    margin-top: 0.6rem;
+}
+
+/* ── 섹션 헤더 ── */
+.section-hd {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.22em;
+    color: #888;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 0.35rem;
+    margin: 1.8rem 0 0.9rem;
 }
 
 /* ── 입력 레이블 (■ ▲ 마커) ── */
 .input-label {
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.18em;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
     text-transform: uppercase;
     color: #0f0f0f;
-    margin-bottom: 0.3rem;
+    margin-bottom: 0.35rem;
     display: flex;
     align-items: center;
     gap: 0.4rem;
 }
 .input-label .marker {
-    font-size: 0.55rem;
+    font-size: 9px;
     color: #0f0f0f;
     line-height: 1;
 }
 
-/* ── 자동 조회 안내 라벨 ── */
+/* ── 자동 조회 안내 라벨 (Tier 3) ── */
 .auto-label {
-    font-size: 0.6rem;
-    letter-spacing: 0.1em;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0.01em;
     color: #aaa;
-    text-transform: uppercase;
     margin-top: 0.2rem;
 }
 
@@ -89,18 +138,7 @@ div[data-testid="stTextInput"] input,
 div[data-testid="stSelectbox"] > div > div {
     height: 42px !important;
     min-height: 42px !important;
-}
-
-/* ── 섹션 헤더 ── */
-.section-hd {
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.22em;
-    color: #888;
-    text-transform: uppercase;
-    border-bottom: 1px solid #e0e0e0;
-    padding-bottom: 0.35rem;
-    margin: 1.8rem 0 0.9rem;
+    font-size: 14px !important;
 }
 
 /* ── 정보 카드 ── */
@@ -112,36 +150,37 @@ div[data-testid="stSelectbox"] > div > div {
     margin-bottom: 0.5rem;
 }
 .info-label {
-    font-size: 0.6rem;
+    font-size: 11px;
+    font-weight: 700;
     color: #888;
-    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
 }
 .info-value {
     font-family: 'Inter', monospace;
-    font-size: 0.95rem;
+    font-size: 14px;
     font-weight: 500;
     color: #0f0f0f;
-    margin-top: 0.15rem;
+    margin-top: 0.2rem;
 }
 
-/* ── 판정 뱃지 — 텍스트+보더만, 배경 없음 ── */
-.badge-ok   { color:#2d6a4f; border:1px solid #2d6a4f; padding:2px 9px;
-              font-size:0.7rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
-.badge-warn { color:#8a6800; border:1px solid #8a6800; padding:2px 9px;
-              font-size:0.7rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
-.badge-fail { color:#9b2335; border:1px solid #9b2335; padding:2px 9px;
-              font-size:0.7rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
-.badge-na   { color:#999; border:1px solid #ccc; padding:2px 9px;
-              font-size:0.7rem; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; }
+/* ── 판정 뱃지 — Tier 3 기준, 텍스트+보더만 ── */
+.badge-ok   { color:#2d6a4f; border:1px solid #2d6a4f; padding:2px 10px;
+              font-size:14px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+.badge-warn { color:#8a6800; border:1px solid #8a6800; padding:2px 10px;
+              font-size:14px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+.badge-fail { color:#9b2335; border:1px solid #9b2335; padding:2px 10px;
+              font-size:14px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
+.badge-na   { color:#999; border:1px solid #ccc; padding:2px 10px;
+              font-size:14px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; }
 
-/* ── 조치항목 ── */
+/* ── 조치항목 (Tier 3) ── */
 .action-item {
     border-left: 2px solid #8a6800;
-    padding: 0.5rem 0.9rem;
-    margin: 0.3rem 0;
-    font-size: 0.83rem;
+    padding: 0.55rem 1rem;
+    margin: 0.35rem 0;
+    font-size: 14px;
+    font-weight: 400;
     color: #444;
     background: #fefdf5;
 }
@@ -152,43 +191,60 @@ div[data-testid="stSelectbox"] > div > div {
 }
 
 /* ── 구분선 ── */
-.divider { border: none; border-top: 1px solid #ebebeb; margin: 0.8rem 0; }
+.divider { border: none; border-top: 1px solid #ebebeb; margin: 0.9rem 0; }
 
-/* ── 푸터 ── */
+/* ── 푸터 (Tier 3 이하) ── */
 .ce-footer {
     margin-top: 3.5rem;
     padding-top: 1rem;
     border-top: 1px solid #e0e0e0;
-    font-size: 0.65rem;
-    letter-spacing: 0.14em;
+    font-size: 11px;
+    letter-spacing: 0.16em;
     color: #ccc;
     text-align: center;
     text-transform: uppercase;
 }
 
-/* ── 버튼 ── */
+/* ── 버튼 (Tier 3) ── */
 .stButton > button {
     background: #0f0f0f !important;
     color: #ffffff !important;
     border: none !important;
     border-radius: 0 !important;
     font-family: 'Inter', sans-serif !important;
-    font-weight: 400 !important;
+    font-weight: 500 !important;
     letter-spacing: 0.12em !important;
-    font-size: 0.78rem !important;
+    font-size: 14px !important;
     height: 42px !important;
 }
 .stButton > button:hover { background: #2d6a4f !important; }
 
-/* ── 다운로드 버튼 ── */
+/* ── 다운로드 버튼 (Tier 3) ── */
 .stDownloadButton > button {
     background: transparent !important;
     color: #0f0f0f !important;
     border: 1px solid #0f0f0f !important;
     border-radius: 0 !important;
     font-family: 'Inter', sans-serif !important;
-    font-size: 0.78rem !important;
-    letter-spacing: 0.1em !important;
+    font-size: 14px !important;
+    letter-spacing: 0.08em !important;
+}
+
+/* ── Streamlit 내부 텍스트 Tier 3 기준 통일 ── */
+div[data-testid="stExpander"] summary p,
+div[data-testid="stCaption"] p,
+.stMarkdown p {
+    font-size: 14px !important;
+}
+div[data-testid="metric-container"] label {
+    font-size: 11px !important;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #888;
+}
+div[data-testid="metric-container"] [data-testid="stMetricValue"] {
+    font-size: 18px !important;
+    font-weight: 600 !important;
 }
 </style>
 """, unsafe_allow_html=True)

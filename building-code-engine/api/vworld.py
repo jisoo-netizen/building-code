@@ -9,9 +9,23 @@ import requests
 import time
 from dataclasses import dataclass
 from typing import Optional
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 VWORLD_KEY = "C7A5CAD1-4997-31D8-B659-59AAADE9DCE0"
 BASE = "https://api.vworld.kr/req"
+
+_RETRY_STRATEGY = Retry(
+    total=3,
+    backoff_factor=1,          # 1s → 2s → 4s
+    status_forcelist=[502, 503, 504],
+    allowed_methods=["GET"],
+    raise_on_status=False,
+)
+_ADAPTER = HTTPAdapter(max_retries=_RETRY_STRATEGY)
+_SESSION = requests.Session()
+_SESSION.mount("https://", _ADAPTER)
+_SESSION.mount("http://", _ADAPTER)
 
 # VWorld 용도지역 uname → ZoneType.value 매핑
 ZONE_NAME_MAP: dict[str, str] = {
@@ -61,8 +75,26 @@ class ZoningInfo:
     raw: dict
 
 
-def _get(url: str, params: dict, timeout: int = 12) -> dict:
-    resp = requests.get(url, params=params, timeout=timeout)
+def _get(url: str, params: dict, timeout: int = 10) -> dict:
+    try:
+        resp = _SESSION.get(url, params=params, timeout=timeout)
+    except requests.exceptions.ConnectionError as e:
+        raise ConnectionError(
+            "VWorld 서버 일시 불안정 — 잠시 후 다시 시도해주세요.\n"
+            f"(원인: {e})"
+        ) from e
+    except requests.exceptions.Timeout as e:
+        raise TimeoutError(
+            "VWorld 서버 응답 시간 초과 — 잠시 후 다시 시도해주세요.\n"
+            f"(timeout={timeout}s)"
+        ) from e
+
+    if resp.status_code in (502, 503, 504):
+        raise ConnectionError(
+            f"VWorld 서버 일시 불안정 (HTTP {resp.status_code}) — "
+            "잠시 후 다시 시도해주세요. (3회 재시도 후 동일 오류)"
+        )
+
     resp.raise_for_status()
     return resp.json()
 
