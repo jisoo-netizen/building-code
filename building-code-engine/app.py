@@ -80,8 +80,8 @@ html, body, [class*="css"] {
 .ce-wordmark {
     font-family: 'Inter', sans-serif;
     font-size: 52px;
-    font-weight: 700;
-    letter-spacing: 0.12em;
+    font-weight: 200;
+    letter-spacing: 0.18em;
     color: #0f0f0f;
     text-transform: uppercase;
     line-height: 1;
