@@ -1,5 +1,5 @@
 """
-YM Studio — 건축법규 자동 검토 웹앱
+COD-ESTATE — 건축법규 자동 검토 웹앱
 streamlit run app.py
 """
 
@@ -8,8 +8,8 @@ import traceback
 
 # ── 페이지 설정 (반드시 첫 번째) ────────────────────────────────────────────
 st.set_page_config(
-    page_title="YM Studio | 건축법규 검토",
-    page_icon="🏛",
+    page_title="COD-ESTATE | 건축법규 검토",
+    page_icon="⬛",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -17,48 +17,195 @@ st.set_page_config(
 # ── 전역 CSS ─────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
-/* 폰트·기본 */
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
-html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
+/* 폰트 */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Noto+Sans+KR:wght@300;400;500;600&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Pretendard', 'Inter', 'Noto Sans KR', sans-serif;
+    background: #ffffff;
+    color: #0f0f0f;
+}
+
+/* Streamlit 기본 배경 오버라이드 */
+.stApp { background: #ffffff; }
+section[data-testid="stSidebar"] { background: #f5f5f5; }
 
 /* 헤더 */
-.ym-header { padding: 1.5rem 0 0.5rem; border-bottom: 2px solid #1a1a2e; margin-bottom: 1.5rem; }
-.ym-logo   { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.25em;
-             color: #6c757d; text-transform: uppercase; }
-.ym-title  { font-size: 1.8rem; font-weight: 700; color: #1a1a2e; margin-top: 0.2rem; }
-.ym-sub    { font-size: 0.85rem; color: #6c757d; margin-top: 0.1rem; }
-
-/* 카드 */
-.info-card { background:#f8f9fa; border-radius:10px; padding:1rem 1.2rem;
-             border-left:4px solid #1a1a2e; margin-bottom:0.8rem; }
-.info-label { font-size:0.72rem; color:#6c757d; font-weight:600;
-              text-transform:uppercase; letter-spacing:0.05em; }
-.info-value { font-size:1.05rem; font-weight:600; color:#1a1a2e; }
-
-/* 판정 뱃지 */
-.badge-ok   { background:#d4edda; color:#155724; border-radius:6px;
-              padding:2px 10px; font-size:0.78rem; font-weight:600; }
-.badge-warn { background:#fff3cd; color:#856404; border-radius:6px;
-              padding:2px 10px; font-size:0.78rem; font-weight:600; }
-.badge-fail { background:#f8d7da; color:#721c24; border-radius:6px;
-              padding:2px 10px; font-size:0.78rem; font-weight:600; }
-.badge-na   { background:#e2e3e5; color:#383d41; border-radius:6px;
-              padding:2px 10px; font-size:0.78rem; font-weight:600; }
-
-/* 조치항목 */
-.action-item { background:#fff8e1; border-left:3px solid #ffc107;
-               border-radius:6px; padding:0.6rem 1rem; margin:0.4rem 0;
-               font-size:0.88rem; }
-.action-crit { background:#fdecea; border-left:3px solid #dc3545; }
+.ce-header {
+    padding: 2.5rem 0 1.5rem;
+    border-bottom: 1px solid #0f0f0f;
+    margin-bottom: 2rem;
+}
+.ce-wordmark {
+    font-family: 'Inter', sans-serif;
+    font-size: 1.05rem;
+    font-weight: 300;
+    letter-spacing: 0.45em;
+    color: #0f0f0f;
+    text-transform: uppercase;
+}
+.ce-title {
+    font-family: 'Inter', sans-serif;
+    font-size: 2.2rem;
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    color: #0f0f0f;
+    margin-top: 0.4rem;
+    line-height: 1.2;
+}
+.ce-sub {
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: #888;
+    margin-top: 0.6rem;
+    font-weight: 400;
+}
 
 /* 섹션 헤더 */
-.section-hd { font-size:0.7rem; font-weight:700; letter-spacing:0.12em;
-              color:#6c757d; text-transform:uppercase;
-              border-bottom:1px solid #dee2e6; padding-bottom:0.3rem;
-              margin:1.2rem 0 0.6rem; }
+.section-hd {
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+    color: #888;
+    text-transform: uppercase;
+    border-bottom: 1px solid #e0e0e0;
+    padding-bottom: 0.35rem;
+    margin: 1.6rem 0 0.8rem;
+}
+
+/* 정보 카드 */
+.info-card {
+    background: #fafafa;
+    border: 1px solid #e8e8e8;
+    border-left: 2px solid #0f0f0f;
+    padding: 0.9rem 1.1rem;
+    margin-bottom: 0.6rem;
+}
+.info-label {
+    font-size: 0.62rem;
+    color: #888;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+}
+.info-value {
+    font-family: 'Inter', monospace;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #0f0f0f;
+    margin-top: 0.2rem;
+}
+
+/* 판정 뱃지 — 배경 없이 텍스트+보더로만 */
+.badge-ok {
+    color: #2d6a4f;
+    border: 1px solid #2d6a4f;
+    padding: 2px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.badge-warn {
+    color: #8a6800;
+    border: 1px solid #8a6800;
+    padding: 2px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.badge-fail {
+    color: #9b2335;
+    border: 1px solid #9b2335;
+    padding: 2px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.badge-na {
+    color: #999;
+    border: 1px solid #ccc;
+    padding: 2px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/* 조치항목 */
+.action-item {
+    border-left: 2px solid #8a6800;
+    padding: 0.55rem 1rem;
+    margin: 0.35rem 0;
+    font-size: 0.85rem;
+    color: #444;
+    background: #fefdf5;
+}
+.action-crit {
+    border-left: 2px solid #9b2335;
+    background: #fdf8f8;
+    color: #444;
+}
 
 /* 구분선 */
-.divider { border:none; border-top:1px solid #dee2e6; margin:1.2rem 0; }
+.divider { border: none; border-top: 1px solid #e8e8e8; margin: 1rem 0; }
+
+/* 영문 라벨 (항목명 위 작은 캡션) */
+.en-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 0.6rem;
+    letter-spacing: 0.18em;
+    color: #aaa;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 1px;
+}
+
+/* 숫자 모노 */
+.mono-val {
+    font-family: 'Inter', 'Courier New', monospace;
+    font-weight: 500;
+}
+
+/* 푸터 */
+.ce-footer {
+    margin-top: 3rem;
+    padding-top: 1rem;
+    border-top: 1px solid #e0e0e0;
+    font-size: 0.7rem;
+    letter-spacing: 0.12em;
+    color: #bbb;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+/* 버튼 오버라이드 */
+.stButton > button {
+    background: #0f0f0f !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 0 !important;
+    font-family: 'Inter', sans-serif !important;
+    font-weight: 400 !important;
+    letter-spacing: 0.1em !important;
+    font-size: 0.82rem !important;
+}
+.stButton > button:hover {
+    background: #2d6a4f !important;
+}
+
+/* 다운로드 버튼 */
+.stDownloadButton > button {
+    background: transparent !important;
+    color: #0f0f0f !important;
+    border: 1px solid #0f0f0f !important;
+    border-radius: 0 !important;
+    font-family: 'Inter', sans-serif !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.08em !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -67,12 +214,12 @@ html, body, [class*="css"] { font-family: 'Noto Sans KR', sans-serif; }
 
 def badge(status: str) -> str:
     if status == "적합":
-        return '<span class="badge-ok">✅ 적합</span>'
+        return '<span class="badge-ok">OK</span>'
     if status == "검토필요":
-        return '<span class="badge-warn">⚠ 검토필요</span>'
+        return '<span class="badge-warn">REVIEW</span>'
     if status == "부적합":
-        return '<span class="badge-fail">❌ 부적합</span>'
-    return '<span class="badge-na">— 해당없음</span>'
+        return '<span class="badge-fail">FAIL</span>'
+    return '<span class="badge-na">N/A</span>'
 
 
 # ── 엔진 임포트 ──────────────────────────────────────────────────────────────
@@ -103,17 +250,17 @@ USE_OPTIONS: dict[str, tuple[BuildingUseCode, str]] = {
 }
 
 SECTION_LABELS: dict[str, str] = {
-    "용도변경":    "🔄 용도변경",
-    "용도지역":    "🗺 용도지역",
-    "주차":       "🚗 주차",
-    "오수·정화조": "💧 오수·정화조",
-    "내진설계":    "🏗 내진설계",
-    "소방시설":    "🚒 소방시설",
-    "피난·방화구획":"🚪 피난·방화구획",
-    "이격거리":    "📐 이격거리",
-    "장애인편의":   "♿ 장애인편의",
-    "승강기":      "🛗 승강기",
-    "에너지":      "⚡ 에너지",
+    "용도변경":     "USE CHANGE — 용도변경",
+    "용도지역":     "ZONE — 용도지역",
+    "주차":        "PARKING — 주차",
+    "오수·정화조":  "SEWAGE — 오수·정화조",
+    "내진설계":     "SEISMIC — 내진설계",
+    "소방시설":     "FIRE SAFETY — 소방시설",
+    "피난·방화구획": "EVACUATION — 피난·방화구획",
+    "이격거리":     "SETBACK — 이격거리",
+    "장애인편의":   "ACCESSIBILITY — 장애인편의",
+    "승강기":       "ELEVATOR — 승강기",
+    "에너지":       "ENERGY — 에너지",
 }
 
 
@@ -189,10 +336,10 @@ def render_results_table(items: list[ReportItem]):
     for section, sec_items in by_section.items():
         # 섹션 내 최고 심각도
         worst = min(sec_items, key=lambda x: {"CRITICAL":0,"WARNING":1,"INFO":2}[x.severity.value])
-        icon = "❌" if worst.severity == Severity.CRITICAL else ("⚠" if worst.severity == Severity.WARNING else "✅")
+        icon = "▪" if worst.severity == Severity.CRITICAL else ("▫" if worst.severity == Severity.WARNING else "·")
         label = SECTION_LABELS.get(section, section)
 
-        with st.expander(f"{icon} {label} ({len(sec_items)}개 항목)", expanded=(worst.severity != Severity.INFO)):
+        with st.expander(f"{icon} {label}  [{len(sec_items)}]", expanded=(worst.severity != Severity.INFO)):
             for it in sec_items:
                 cols = st.columns([3, 4, 2])
                 with cols[0]:
@@ -396,7 +543,7 @@ def tab_single():
         parking_provided = st.number_input("계획 주차대수 (0=자동)", min_value=0,
                                            max_value=500, value=0, step=1, key="single_pk")
 
-    run_btn = st.button("🔍 법규 검토 시작", type="primary", use_container_width=True, key="btn_single")
+    run_btn = st.button("RUN COMPLIANCE CHECK", type="primary", use_container_width=True, key="btn_single")
     st.markdown("---")
 
     if run_btn:
@@ -444,9 +591,9 @@ def tab_single():
 
             txt_report = generate_report(result.site)
             st.download_button(
-                label="📄 전체 리포트 텍스트 다운로드",
+                label="DOWNLOAD REPORT — 전체 리포트 텍스트",
                 data=txt_report.encode("utf-8"),
-                file_name=f"법규검토_{result.building.address[:15].replace(' ','_')}.txt",
+                file_name=f"COD-ESTATE_{result.building.address[:15].replace(' ','_')}.txt",
                 mime="text/plain",
             )
 
@@ -499,7 +646,7 @@ def tab_multi():
         north_m = st.number_input("정북 이격거리 (m, 0=미입력)", min_value=0.0,
                                   max_value=50.0, value=0.0, step=0.5, key="multi_north")
 
-    run_btn = st.button("🔍 다필지 검토 시작", type="primary", use_container_width=True, key="btn_multi")
+    run_btn = st.button("RUN MULTI-PARCEL CHECK", type="primary", use_container_width=True, key="btn_multi")
 
     st.markdown(
         '<div style="font-size:0.8rem;color:#888;margin-top:0.3rem;">'
@@ -555,9 +702,9 @@ def tab_multi():
             # 텍스트 리포트 다운로드
             txt = print_multi_parcel_report(report)
             st.download_button(
-                label="📄 통합 리포트 텍스트 다운로드",
+                label="DOWNLOAD REPORT — 통합 리포트 텍스트",
                 data=txt.encode("utf-8"),
-                file_name="다필지_통합_법규검토.txt",
+                file_name="COD-ESTATE_다필지_통합검토.txt",
                 mime="text/plain",
             )
 
@@ -572,20 +719,26 @@ def tab_multi():
 def main():
     # 헤더
     st.markdown("""
-    <div class="ym-header">
-        <div class="ym-logo">YM Studio</div>
-        <div class="ym-title">건축법규 자동 검토 시스템</div>
-        <div class="ym-sub">주소 입력 → VWorld + 건축물대장 API 자동 조회 → 법규 검토 리포트</div>
+    <div class="ce-header">
+        <div class="ce-wordmark">COD-ESTATE</div>
+        <div class="ce-title">건축법규 × 부동산 인텔리전스</div>
+        <div class="ce-sub">ADDRESS INPUT → VWORLD + 건축물대장 API → COMPLIANCE REPORT</div>
     </div>
     """, unsafe_allow_html=True)
 
-    tab1, tab2 = st.tabs(["🏠 단일 필지 검토", "🏘 다필지 동시 검토"])
+    tab1, tab2 = st.tabs(["SINGLE PARCEL — 단일 필지", "MULTI PARCEL — 다필지 동시 검토"])
 
     with tab1:
         tab_single()
 
     with tab2:
         tab_multi()
+
+    # 푸터
+    st.markdown(
+        '<div class="ce-footer">COD-ESTATE &mdash; Powered by YM Studio</div>',
+        unsafe_allow_html=True,
+    )
 
 
 if __name__ == "__main__":
