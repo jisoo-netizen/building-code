@@ -1,7 +1,13 @@
 """
 전면 통합 건축법규 검토 리포트
 용도변경 전·후 비교 + 항목별 Critical / Warning / Info 자동 분류
+섹션 순서: BUILDING INFO → SUMMARY → USE CHANGE → ZONE → PARKING → SEWAGE
+           → SETBACK → FIRE SAFETY → EVACUATION → SEISMIC → ACCESSIBILITY
+           → ELEVATOR → ENERGY → MULTI USE BUSINESS → TOURISM SPECIAL
+           → REDEVELOPMENT → ACTION
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -26,19 +32,38 @@ from .use_change import (
 from .sewage import SewerUse, SewageInput, compare_sewage, calc_sewage
 from .seismic import check_seismic
 from .building_act import BuildingAction, determine_action
-from .fire_safety import check_fire_safety, InstallStatus as FireStatus
+from .fire_safety import (
+    check_fire_safety,
+    has_sprinkler_installed,
+    InstallStatus as FireStatus,
+    FireSafetyItem,
+)
 from .evacuation import full_evacuation_check
 from .setback import full_setback_check
 from .accessibility import check_accessibility, InstallObligation
 from .elevator import check_elevator
 from .energy import check_energy, CertObligation
+from .multi_use_business import check_multi_use_business, MultiUseRequirement
+from .tourism_special import check_tourism_special, TourismCheckStatus
+from .redevelopment_check import check_redevelopment, RedevelStatus
 
+
+# ── 심각도 ─────────────────────────────────────────────────────────────────
 
 class Severity(str, Enum):
     CRITICAL = "CRITICAL"    # 부적합 → 공사 불가
-    WARNING = "WARNING"      # 검토 필요 / 조건부 적합
-    INFO = "INFO"            # 참고 / 적합
+    WARNING  = "WARNING"     # 검토 필요 / 조건부 적합
+    INFO     = "INFO"        # 참고 / 적합
 
+
+SEV_LABEL = {
+    Severity.CRITICAL: "[부적합]",
+    Severity.WARNING:  "[검토필요]",
+    Severity.INFO:     "[적합]",
+}
+
+
+# ── 리포트 항목 ────────────────────────────────────────────────────────────
 
 @dataclass
 class ReportItem:
@@ -47,8 +72,10 @@ class ReportItem:
     severity: Severity
     status: str          # "적합" / "부적합" / "검토필요" / "해당없음"
     detail: str
-    action: str = ""     # 조치 필요 사항
+    action: str = ""
 
+
+# ── 필지 정보 ──────────────────────────────────────────────────────────────
 
 @dataclass
 class SiteInfoFull:
@@ -56,17 +83,19 @@ class SiteInfoFull:
     # 기본
     address: str
     zone_type: ZoneType
-    site_area: float              # 대지면적 (㎡)
-    road_width_m: float           # 접면 도로 폭 (m)
+    site_area: float
+    road_width_m: float
 
-    # 건물 (변경 후 기준 — 용도변경이므로 구조 동일)
-    building_footprint: float     # 건축면적 (㎡)
-    total_floor_area: float       # 연면적 (㎡, 용적률 산정 대상)
-    floor_area_per_floor: float   # 층당 바닥면적 (㎡)
-    building_height_m: float      # 최고 높이 (m)
+    # 건물 (용도변경이므로 구조 동일)
+    building_footprint: float
+    total_floor_area: float
+    floor_area_per_floor: float
+    building_height_m: float
     floors_above: int
     floors_below: int = 0
     construction_year: int = 2000
+    basement_area: float = 0.0          # 지하층 면적 (㎡)
+    is_windowless_floor: bool = False   # 무창층 여부
 
     # 이격거리
     north_setback_m: Optional[float] = None
@@ -78,6 +107,7 @@ class SiteInfoFull:
     to_use_code: BuildingUseCode = BuildingUseCode.FIRST_NEIGHBORHOOD
     from_use_str: str = "다가구주택"
     to_use_str: str = "제1종근린생활시설"
+    to_use_detail_str: str = ""         # 세부 업종 (다중이용업소·관광숙박 판단용)
 
     # 주차
     parking_before: list[ParkingInput] = field(default_factory=list)
@@ -96,23 +126,27 @@ class SiteInfoFull:
     is_new_build: bool = False
     is_public: bool = False
 
-    # 근생 업종 (용도변경 대상)
+    # 근생 업종
     neighborhood_biz_type: Optional[NeighborhoodBusinessType] = None
     neighborhood_biz_area: float = 0.0
+
+    # 다중이용업소
+    is_multi_use_business: bool = False
+
+    # 관광진흥법 숙박
+    has_tourism_approval: bool = False
+    distance_to_residential_m: Optional[float] = None
+
+    # 정비구역
+    is_in_redevel_zone: Optional[bool] = None   # None = 미확인
+    redevel_zone_type: str = ""
 
     # 메타
     designer: str = ""
     note: str = ""
 
 
-# ── 공통 포매팅 헬퍼 ────────────────────────────────────────────────────────
-
-SEV_LABEL = {
-    Severity.CRITICAL: "[부적합]",
-    Severity.WARNING:  "[검토필요]",
-    Severity.INFO:     "[적합]",
-}
-
+# ── 공통 헬퍼 ──────────────────────────────────────────────────────────────
 
 def _item(
     section: str,
@@ -133,24 +167,20 @@ def _item(
                       status=status, detail=detail, action=action)
 
 
-# ── 섹션별 검토 함수 ─────────────────────────────────────────────────────────
+# ── 섹션별 검토 함수 ────────────────────────────────────────────────────────
 
 def _check_use_change(site: SiteInfoFull) -> list[ReportItem]:
     proc = determine_use_change(site.from_use_code, site.to_use_code)
-    is_ok = proc.category.value in ("신고", "기재변경", "해당없음")
     items = [_item(
-        "용도변경", "절차 구분",
-        None,
+        "용도변경", "절차 구분", None,
         f"{site.from_use_str} → {site.to_use_str} : {proc.category.value}",
-        action=proc.reason,
-        warn_only=True,
+        action=proc.reason, warn_only=True,
     )]
     if site.neighborhood_biz_type:
         cls = classify_neighborhood(site.neighborhood_biz_type, site.neighborhood_biz_area)
         items.append(_item(
             "용도변경", "근생 업종 분류",
-            cls.applicable,
-            cls.note,
+            cls.applicable, cls.note,
             action="" if cls.applicable else "업종·면적 재검토 또는 2종 근생 허가 신청",
         ))
     return items
@@ -159,7 +189,6 @@ def _check_use_change(site: SiteInfoFull) -> list[ReportItem]:
 def _check_zoning(site: SiteInfoFull) -> list[ReportItem]:
     bcr = check_bcr(site.zone_type, site.site_area, site.building_footprint)
     far = check_far(site.zone_type, site.site_area, site.total_floor_area)
-    reg = get_zone_regulation(site.zone_type)
     return [
         _item("용도지역", "건폐율",
               bcr["pass"],
@@ -173,7 +202,7 @@ def _check_zoning(site: SiteInfoFull) -> list[ReportItem]:
 
 
 def _check_parking_section(site: SiteInfoFull) -> list[ReportItem]:
-    items = []
+    items: list[ReportItem] = []
     if not site.parking_after:
         return [_item("주차", "주차대수", None, "주차 계획 미입력", warn_only=True)]
 
@@ -183,36 +212,23 @@ def _check_parking_section(site: SiteInfoFull) -> list[ReportItem]:
         provided_after=site.parking_provided,
     )
 
-    # 단계1: 변경 전 기준
     before_bases = "; ".join(r.calculation_basis for r in cmp.before_results) or "해당 없음"
-    items.append(_item(
-        "주차", "①변경 전 필요대수",
-        True,
-        f"{cmp.before_total}대 ({before_bases})",
-    ))
+    items.append(_item("주차", "①변경 전 필요대수", True,
+                       f"{cmp.before_total}대 ({before_bases})"))
 
-    # 단계2: 변경 후 기준
     after_bases = "; ".join(r.calculation_basis for r in cmp.after_results) or "해당 없음"
-    items.append(_item(
-        "주차", "②변경 후 필요대수",
-        True,
-        f"{cmp.after_total}대 ({after_bases})",
-    ))
+    items.append(_item("주차", "②변경 후 필요대수", True,
+                       f"{cmp.after_total}대 ({after_bases})"))
 
-    # 단계3: 추가 설치 의무 (비고5)
     items.append(_item(
-        "주차", "③추가 설치 의무(비고5)",
-        cmp.pass_,
-        (
-            f"추가 의무 {cmp.additional_required}대 = "
-            f"변경후 {cmp.after_total}대 − 변경전 {cmp.before_total}대 "
-            f"/ 계획 {site.parking_provided}대"
-        ),
+        "주차", "③추가 설치 의무(비고5)", cmp.pass_,
+        (f"추가 의무 {cmp.additional_required}대 = "
+         f"변경후 {cmp.after_total}대 − 변경전 {cmp.before_total}대 "
+         f"/ 계획 {site.parking_provided}대"),
         action=f"주차 {cmp.deficit}대 부족 → 인근 부설주차장 확보 또는 주차장법 §19의2 협의"
                if not cmp.pass_ else "",
     ))
 
-    # 장애인 주차
     d_after = cmp.disabled_after
     items.append(_item(
         "주차", "장애인전용주차",
@@ -233,87 +249,16 @@ def _check_sewage_section(site: SiteInfoFull) -> list[ReportItem]:
         if cmp["total_before_L"] > 0 else 0
     )
     return [
-        _item(
-            "오수·정화조", "일 오수발생량",
-            cmp["increase_L"] <= 0,
-            f"변경 전 {cmp['total_before_L']:.0f}L/일 → 변경 후 {cmp['total_after_L']:.0f}L/일 "
-            f"({increase_pct:+.1f}%)",
-            action="오수 증가 시 하수도 연결 용량 확인 및 정화조 증설 검토",
-            warn_only=True,
-        ),
-        _item(
-            "오수·정화조", "정화조 용량",
-            not cmp["septic_upgrade_needed"],
-            f"변경 전 {cmp['septic_before_m3']:.1f}㎥ → 변경 후 {cmp['septic_after_m3']:.1f}㎥",
-            action="정화조 용량 증설 필요" if cmp["septic_upgrade_needed"] else "",
-            warn_only=True,
-        ),
-    ]
-
-
-def _check_seismic_section(site: SiteInfoFull) -> list[ReportItem]:
-    r = check_seismic(
-        site.total_floor_area, site.floors_above,
-        site.to_use_str, site.construction_year,
-        is_new_build=site.is_new_build,
-    )
-    items = [_item(
-        "내진설계", "내진설계 의무",
-        not r.required or True,   # 신축 아니면 기존 구조 유지 → 검토필요
-        f"{r.grade.value} / {r.reason}",
-        action="용도변경 시 구조 변경 없으면 기존 내진성능 검토서 제출 권고",
-        warn_only=True,
-    )]
-    if r.retrofit_recommended:
-        items.append(_item(
-            "내진설계", "내진보강 권고",
-            False,
-            r.retrofit_note,
-            action="내진성능 평가 용역 후 보강 설계 시행",
-            warn_only=True,
-        ))
-    return items
-
-
-def _check_fire_section(site: SiteInfoFull) -> list[ReportItem]:
-    checks = check_fire_safety(
-        site.total_floor_area, site.floors_above,
-        site.building_height_m, site.to_use_str,
-        site.has_sprinkler,
-        floors_below=site.floors_below,
-    )
-    items = []
-    for c in checks:
-        ok = c.status == FireStatus.NOT_REQUIRED or c.status == FireStatus.REQUIRED
-        warn = c.status == FireStatus.RECOMMENDED
-        items.append(_item(
-            "소방시설", c.item.value,
-            True if c.status == FireStatus.NOT_REQUIRED else None if warn else True,
-            f"{c.status.value} - {c.basis}",
-            action=f"{c.item.value} 설계 반영 필요" if c.status == FireStatus.REQUIRED else "",
-            warn_only=(c.status == FireStatus.RECOMMENDED),
-        ))
-    return items
-
-
-def _check_evacuation_section(site: SiteInfoFull) -> list[ReportItem]:
-    checks = full_evacuation_check(
-        floor_room_area=site.floor_area_per_floor,
-        floors_above=site.floors_above,
-        floor_area_per_floor=site.floor_area_per_floor,
-        has_sprinkler=site.has_sprinkler,
-        building_use_str=site.to_use_str,
-        both_sides_corridor=site.both_sides_corridor,
-    )
-    return [
-        _item(
-            "피난·방화구획", r.item,
-            r.pass_,
-            f"{r.requirement} / 현황: {r.current_status}",
-            action=r.note if not r.pass_ else "",
-            warn_only=not r.pass_,
-        )
-        for r in checks
+        _item("오수·정화조", "일 오수발생량",
+              cmp["increase_L"] <= 0,
+              f"변경 전 {cmp['total_before_L']:.0f}L/일 → 변경 후 {cmp['total_after_L']:.0f}L/일 ({increase_pct:+.1f}%)",
+              action="오수 증가 시 하수도 연결 용량 확인 및 정화조 증설 검토",
+              warn_only=True),
+        _item("오수·정화조", "정화조 용량",
+              not cmp["septic_upgrade_needed"],
+              f"변경 전 {cmp['septic_before_m3']:.1f}㎥ → 변경 후 {cmp['septic_after_m3']:.1f}㎥",
+              action="정화조 용량 증설 필요" if cmp["septic_upgrade_needed"] else "",
+              warn_only=True),
     ]
 
 
@@ -328,13 +273,84 @@ def _check_setback_section(site: SiteInfoFull) -> list[ReportItem]:
     )
     return [
         _item(
-            "이격거리", r.item,
-            r.pass_,
+            "이격거리", r.item, r.pass_,
             f"필요 {r.required_m}m / 계획 {r.actual_m}m" if r.required_m is not None else r.basis,
             action=r.note if not r.pass_ else "",
         )
         for r in checks
     ]
+
+
+def _check_fire_section(site: SiteInfoFull) -> list[ReportItem]:
+    checks = check_fire_safety(
+        total_floor_area=site.total_floor_area,
+        floors_above=site.floors_above,
+        building_height_m=site.building_height_m,
+        building_use_str=site.to_use_str,
+        has_sprinkler=site.has_sprinkler,
+        floors_below=site.floors_below,
+        basement_area=site.basement_area,
+        is_windowless_floor=site.is_windowless_floor,
+    )
+    # 스프링클러 설치 의무 여부 → evacuation.py 방화구획 완화 연계
+    site._sprinkler_required = has_sprinkler_installed(checks)  # type: ignore[attr-defined]
+
+    items: list[ReportItem] = []
+    for c in checks:
+        is_req = (c.status == FireStatus.REQUIRED)
+        is_rec = (c.status == FireStatus.RECOMMENDED)
+        items.append(_item(
+            "소방시설", c.item.value,
+            True if c.status == FireStatus.NOT_REQUIRED else None if is_rec else True,
+            f"{c.status.value} - {c.basis}",
+            action=f"{c.item.value} 설계 반영 필요" if is_req else "",
+            warn_only=is_rec,
+        ))
+    return items
+
+
+def _check_evacuation_section(site: SiteInfoFull) -> list[ReportItem]:
+    # 스프링클러 설치 의무가 있으면 방화구획 3배 완화 적용
+    sp_required = getattr(site, "_sprinkler_required", site.has_sprinkler)
+    checks = full_evacuation_check(
+        floor_room_area=site.floor_area_per_floor,
+        floors_above=site.floors_above,
+        floor_area_per_floor=site.floor_area_per_floor,
+        has_sprinkler=site.has_sprinkler or sp_required,
+        building_use_str=site.to_use_str,
+        both_sides_corridor=site.both_sides_corridor,
+    )
+    return [
+        _item(
+            "피난·방화구획", r.item, r.pass_,
+            f"{r.requirement} / 현황: {r.current_status}",
+            action=r.note if not r.pass_ else "",
+            warn_only=not r.pass_,
+        )
+        for r in checks
+    ]
+
+
+def _check_seismic_section(site: SiteInfoFull) -> list[ReportItem]:
+    r = check_seismic(
+        site.total_floor_area, site.floors_above,
+        site.to_use_str, site.construction_year,
+        is_new_build=site.is_new_build,
+        building_height_m=site.building_height_m,
+    )
+    items = [_item(
+        "내진설계", "내진설계 의무",
+        not r.required or True,
+        f"{r.grade.value} / {r.reason}",
+        action="용도변경 시 구조 변경 없으면 기존 내진성능 검토서 제출 권고",
+        warn_only=True,
+    )]
+    if r.retrofit_recommended:
+        items.append(_item(
+            "내진설계", "내진보강 권고", False, r.retrofit_note,
+            action="내진성능 평가 용역 후 보강 설계 시행", warn_only=True,
+        ))
+    return items
 
 
 def _check_accessibility_section(site: SiteInfoFull) -> list[ReportItem]:
@@ -343,16 +359,15 @@ def _check_accessibility_section(site: SiteInfoFull) -> list[ReportItem]:
         site.floors_above, site.parking_provided,
         has_elevator=(site.floors_above >= 6),
     )
-    items = []
+    items: list[ReportItem] = []
     for c in checks:
-        ok = c.obligation == InstallObligation.NOT_REQUIRED or True
-        warn = c.obligation == InstallObligation.MANDATORY
         items.append(_item(
             "장애인편의", c.item.value,
-            True if c.obligation == InstallObligation.NOT_REQUIRED else None,
+            True if c.obligation == InstallObligation.NOT_REQUIRED else
+            True if c.obligation == InstallObligation.MANDATORY else None,
             f"{c.obligation.value} - {c.basis}",
             action=c.note if c.obligation == InstallObligation.MANDATORY else "",
-            warn_only=True,
+            warn_only=(c.obligation == InstallObligation.RECOMMENDED),
         ))
     return items
 
@@ -391,59 +406,143 @@ def _check_energy_section(site: SiteInfoFull) -> list[ReportItem]:
     ]
 
 
-# ── 메인 리포트 생성 ─────────────────────────────────────────────────────────
+def _check_multi_use_section(site: SiteInfoFull) -> list[ReportItem]:
+    detail_str = site.to_use_detail_str or site.to_use_str
+    result = check_multi_use_business(
+        use_detail_str=detail_str,
+        floor_area=site.total_floor_area,
+        floors_below=site.floors_below,
+        is_explicitly_multi_use=site.is_multi_use_business,
+    )
+    if not result.is_multi_use:
+        return []
+    items: list[ReportItem] = []
+    for c in result.checks:
+        is_mand = (c.requirement == MultiUseRequirement.MANDATORY)
+        items.append(_item(
+            "다중이용업소", c.item,
+            True if c.requirement == MultiUseRequirement.NOT_REQUIRED else
+            None if not is_mand else True,
+            f"{c.requirement.value} - {c.detail}",
+            action=f"{c.item} 설계 반영 / 신청 필요" if is_mand else "",
+            warn_only=not is_mand,
+        ))
+    return items
+
+
+def _check_tourism_section(site: SiteInfoFull) -> list[ReportItem]:
+    detail_str = site.to_use_detail_str or site.to_use_str
+    result = check_tourism_special(
+        use_detail_str=detail_str,
+        zone_type_str=site.zone_type.value,
+        road_width_m=site.road_width_m,
+        building_height_m=site.building_height_m,
+        adjacent_setback_m=site.adjacent_setback_m,
+        distance_to_residential_m=site.distance_to_residential_m,
+        has_tourism_approval=site.has_tourism_approval,
+    )
+    if not result.is_tourism_lodging:
+        return []
+    items: list[ReportItem] = []
+    for c in result.checks:
+        ok = (c.status == TourismCheckStatus.PASS)
+        fail = (c.status == TourismCheckStatus.FAIL)
+        items.append(_item(
+            "관광진흥법특례", c.item,
+            ok if (ok or fail) else None,
+            c.detail,
+            action=c.note if fail else "",
+            warn_only=not fail,
+        ))
+    return items
+
+
+def _check_redevelopment_section(site: SiteInfoFull) -> list[ReportItem]:
+    result = check_redevelopment(
+        is_in_zone=site.is_in_redevel_zone,
+        zone_type=site.redevel_zone_type,
+        address=site.address,
+    )
+    if result.status == RedevelStatus.NOT_IN_ZONE:
+        return []
+    sev_ok = (result.status == RedevelStatus.UNKNOWN)
+    return [_item(
+        "정비구역", "정비구역 여부",
+        False if result.status == RedevelStatus.IN_ZONE else None,
+        result.detail,
+        action=result.note,
+        warn_only=True,
+    )]
+
+
+# ── 메인 리포트 생성 ────────────────────────────────────────────────────────
+
+SECTION_ORDER: list[str] = [
+    "용도변경", "용도지역", "주차", "오수·정화조", "이격거리",
+    "소방시설", "피난·방화구획", "내진설계",
+    "장애인편의", "승강기", "에너지",
+    "다중이용업소", "관광진흥법특례", "정비구역",
+]
+
 
 def generate_report(site: SiteInfoFull) -> str:
     """전체 법규 검토 리포트 생성."""
 
+    # ── 섹션 수집 (선언 순서 = 출력 순서) ────────────────────────────────
     all_items: list[ReportItem] = []
     all_items += _check_use_change(site)
     all_items += _check_zoning(site)
     all_items += _check_parking_section(site)
     all_items += _check_sewage_section(site)
-    all_items += _check_seismic_section(site)
+    all_items += _check_setback_section(site)
     all_items += _check_fire_section(site)
     all_items += _check_evacuation_section(site)
-    all_items += _check_setback_section(site)
+    all_items += _check_seismic_section(site)
     all_items += _check_accessibility_section(site)
     all_items += _check_elevator_section(site)
     all_items += _check_energy_section(site)
+    all_items += _check_multi_use_section(site)
+    all_items += _check_tourism_section(site)
+    all_items += _check_redevelopment_section(site)
 
-    # 우선순위 정렬: CRITICAL → WARNING → INFO
+    # ── 심각도 정렬 ────────────────────────────────────────────────────────
     order = {Severity.CRITICAL: 0, Severity.WARNING: 1, Severity.INFO: 2}
-    all_items.sort(key=lambda x: order[x.severity])
+    sorted_by_sev = sorted(all_items, key=lambda x: order[x.severity])
+
+    counts = {s: 0 for s in Severity}
+    for i in all_items:
+        counts[i.severity] += 1
 
     lines: list[str] = []
 
-    def div(char="=", width=64):
+    def div(char="=", width=68):
         lines.append(char * width)
 
-    def h1(txt):
+    def h1(txt: str):
         div()
         lines.append(f"  {txt}")
         div()
 
-    def h2(txt):
-        lines.append(f"\n{'─'*60}")
+    def h2(txt: str):
+        lines.append(f"\n{'─'*64}")
         lines.append(f"  {txt}")
-        lines.append("─" * 60)
+        lines.append("─" * 64)
 
-    # ── 표지 ──────────────────────────────────────────────────────────────
+    # ── BUILDING INFO ──────────────────────────────────────────────────────
     h1("건축법규 전체 검토 리포트 (용도변경)")
     lines.append(f"  대지 위치  : {site.address}")
     lines.append(f"  용도지역   : {site.zone_type.value}")
     lines.append(f"  대지면적   : {site.site_area:,.2f} ㎡")
     lines.append(f"  용도변경   : {site.from_use_str}  →  {site.to_use_str}")
+    if site.to_use_detail_str:
+        lines.append(f"  세부 용도  : {site.to_use_detail_str}")
     lines.append(f"  연면적     : {site.total_floor_area:,.2f} ㎡  /  {site.floors_above}층")
     if site.designer:
         lines.append(f"  설계자     : {site.designer}")
     if site.note:
         lines.append(f"  비고       : {site.note}")
 
-    # ── 종합 통계 ─────────────────────────────────────────────────────────
-    counts = {s: 0 for s in Severity}
-    for i in all_items:
-        counts[i.severity] += 1
+    # ── SUMMARY ────────────────────────────────────────────────────────────
     h2("종합 통계")
     lines.append(
         f"  부적합(CRITICAL) {counts[Severity.CRITICAL]}건 / "
@@ -453,24 +552,29 @@ def generate_report(site: SiteInfoFull) -> str:
     overall = "전 항목 이상 없음" if counts[Severity.CRITICAL] == 0 else "즉시 조치 필요 항목 있음"
     lines.append(f"  최종 판정 : {overall}")
 
-    # ── 전체 항목 테이블 (우선순위 정렬) ──────────────────────────────────
+    # ── 전체 항목 표 (심각도 정렬) ────────────────────────────────────────
     h2("항목별 검토 결과 (우선순위 순)")
-    col_w = [12, 16, 22, 8]
+    col_w = [14, 18, 20, 8]
     header = f"  {'섹션':<{col_w[0]}} {'항목':<{col_w[1]}} {'핵심 내용':<{col_w[2]}} {'판정':>{col_w[3]}}"
     lines.append(header)
     lines.append("  " + "-" * (sum(col_w) + 3))
-
-    for it in all_items:
-        detail_short = it.detail[:40] + ".." if len(it.detail) > 40 else it.detail
+    for it in sorted_by_sev:
+        detail_short = it.detail[:38] + ".." if len(it.detail) > 38 else it.detail
         label = SEV_LABEL[it.severity]
         lines.append(
             f"  {it.section:<{col_w[0]}} {it.item:<{col_w[1]}} "
             f"{detail_short:<{col_w[2]}} {label:>{col_w[3]}}"
         )
 
-    # ── 섹션별 상세 ───────────────────────────────────────────────────────
+    # ── 섹션별 상세 (선언 순서) ────────────────────────────────────────────
+    def _section_order(it: ReportItem) -> int:
+        try:
+            return SECTION_ORDER.index(it.section)
+        except ValueError:
+            return 99
+
     current_section = ""
-    for it in sorted(all_items, key=lambda x: x.section):
+    for it in sorted(all_items, key=_section_order):
         if it.section != current_section:
             h2(f"[{it.section}] 상세")
             current_section = it.section
@@ -479,8 +583,8 @@ def generate_report(site: SiteInfoFull) -> str:
         if it.action:
             lines.append(f"    조치  : {it.action}")
 
-    # ── 조치 필요 항목 요약 ───────────────────────────────────────────────
-    action_items = [i for i in all_items if i.action and i.severity != Severity.INFO]
+    # ── ACTION — 우선 조치 항목 ────────────────────────────────────────────
+    action_items = [i for i in sorted_by_sev if i.action and i.severity != Severity.INFO]
     if action_items:
         h2("우선 조치 항목 요약")
         for idx, it in enumerate(action_items, 1):

@@ -70,9 +70,9 @@ def check_seismic(
             ),
         )
 
-    # 신축 의무 여부 판단 (건축법 시행령 §32의2)
-    area_trigger = total_floor_area >= 500      # 2017 개정전 기준 (개정후 200㎡)
-    floor_trigger = floors_above >= 3
+    # 신축 의무 여부 판단 (건축법 시행령 §32의2, 2017년 개정 반영)
+    area_trigger = total_floor_area >= 200      # 2017년 개정 기준: 200㎡ 이상
+    floor_trigger = floors_above >= 2           # 2층 이상
     height_trigger = building_height_m >= 13.0
     eave_trigger = eave_height_m >= 9.0
     span_trigger = max_span_m >= 10.0
@@ -91,7 +91,7 @@ def check_seismic(
             grade=SeismicGrade.NOT_REQUIRED,
             reason=(
                 f"연면적 {total_floor_area}㎡ / {floors_above}층 — "
-                f"내진설계 의무 기준 미달 (500㎡ 또는 3층 이상)"
+                f"내진설계 의무 기준 미달 (200㎡ 또는 2층 이상)"
             ),
             retrofit_recommended=False,
         )
