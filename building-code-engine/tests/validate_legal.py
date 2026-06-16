@@ -17,6 +17,11 @@ from dataclasses import dataclass
 from typing import Any
 
 
+def _round_half_up(x: float) -> int:
+    """별표2 비고6: 소수점 ≥ 0.5 → 올림, < 0.5 → 버림."""
+    return math.floor(x + 0.5)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  법령 기준값 상수 (하드코딩)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -238,14 +243,15 @@ def validate_parking(
 
     if use_type in ("1종근생", "2종근생"):
         rate = LegalStandard.PARKING[f"{use_type}_㎡당"]
-        legal_spaces = math.ceil(net_area / rate) if net_area > 0 else 0
+        legal_spaces = _round_half_up(net_area / rate) if net_area > 0 else 0
         items.append(_compare_numeric(
             "주차", f"{use_type} 필요 주차대수",
             legal=float(legal_spaces), engine=float(engine_spaces),
             unit="대",
             note_on_fail=(
-                f"법정: ceil({net_area:.1f}㎡ / {rate}㎡/대) = {legal_spaces}대 "
-                f"vs 엔진: {engine_spaces}대. 산정면적(지하·계단·화장실 제외) 확인 필요."
+                f"법정: {net_area:.1f}㎡ / {rate}㎡/대 = {net_area/rate:.3f} "
+                f"→ 비고6 반올림 = {legal_spaces}대  vs 엔진: {engine_spaces}대. "
+                "산정면적(지하·계단·화장실 제외) 확인 필요."
             ),
         ))
         items.append(_compare_numeric(

@@ -202,8 +202,8 @@ def run_case2() -> ValidationReport:
     engine_setback = sun_res.required_setback if sun_res.applicable else 0.0
 
     # ── 예상 정답 검증 ───────────────────────────────────────────────────────
-    # 157.5㎡ / 134㎡ = 1.175 → ceil = 2대
-    expected_spaces = math.ceil(net_area_1st / 134)
+    # 157.5㎡ / 134㎡ = 1.175 → 비고6(소수점 0.175 < 0.5 → 버림) = 1대
+    expected_spaces = math.floor(net_area_1st / 134 + 0.5)
     assert engine_spaces == expected_spaces, \
         f"[케이스2] 주차: 기대 {expected_spaces}대, 실제 {engine_spaces}대"
     assert engine_procedure == "허가", f"[케이스2] 용도변경: 기대 허가, 실제 {engine_procedure}"
@@ -297,7 +297,8 @@ def run_case3() -> ValidationReport:
     engine_setback = sun_res.required_setback if sun_res.applicable else 0.0
 
     # ── 예상 정답 검증 ───────────────────────────────────────────────────────
-    expected_spaces = math.ceil(net_area_2nd / 134)
+    # 156㎡ / 134㎡ = 1.164 → 비고6(소수점 0.164 < 0.5 → 버림) = 1대
+    expected_spaces = math.floor(net_area_2nd / 134 + 0.5)
     assert engine_spaces == expected_spaces, \
         f"[케이스3] 주차: 기대 {expected_spaces}대, 실제 {engine_spaces}대"
     assert engine_procedure == "허가", f"[케이스3] 용도변경: 기대 허가, 실제 {engine_procedure}"

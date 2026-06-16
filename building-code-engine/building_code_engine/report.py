@@ -179,16 +179,40 @@ def _check_parking_section(site: SiteInfoFull) -> list[ReportItem]:
 
     cmp = compare_parking(
         site.parking_before, site.parking_after,
-        site.parking_provided, site.parking_provided,
+        provided_before=0,
+        provided_after=site.parking_provided,
     )
+
+    # 단계1: 변경 전 기준
+    before_bases = "; ".join(r.calculation_basis for r in cmp.before_results) or "해당 없음"
     items.append(_item(
-        "주차", "변경 후 필요 주차대수",
+        "주차", "①변경 전 필요대수",
+        True,
+        f"{cmp.before_total}대 ({before_bases})",
+    ))
+
+    # 단계2: 변경 후 기준
+    after_bases = "; ".join(r.calculation_basis for r in cmp.after_results) or "해당 없음"
+    items.append(_item(
+        "주차", "②변경 후 필요대수",
+        True,
+        f"{cmp.after_total}대 ({after_bases})",
+    ))
+
+    # 단계3: 추가 설치 의무 (비고5)
+    items.append(_item(
+        "주차", "③추가 설치 의무(비고5)",
         cmp.pass_,
-        (f"변경 전 필요 {cmp.before_total}대 / 변경 후 필요 {cmp.after_total}대 / "
-         f"계획 {site.parking_provided}대"),
-        action=f"주차 {abs(cmp.deficit)}대 부족 → 인근 부설주차장 확보 또는 주차장법 §19의2 협의"
+        (
+            f"추가 의무 {cmp.additional_required}대 = "
+            f"변경후 {cmp.after_total}대 − 변경전 {cmp.before_total}대 "
+            f"/ 계획 {site.parking_provided}대"
+        ),
+        action=f"주차 {cmp.deficit}대 부족 → 인근 부설주차장 확보 또는 주차장법 §19의2 협의"
                if not cmp.pass_ else "",
     ))
+
+    # 장애인 주차
     d_after = cmp.disabled_after
     items.append(_item(
         "주차", "장애인전용주차",
