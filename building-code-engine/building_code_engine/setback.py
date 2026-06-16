@@ -1,12 +1,14 @@
 """
 이격거리·건축선 후퇴·도로사선제한 종합
 근거: 건축법 제46조 (건축선) / 제61조 (일조 등) / 건축법 시행령 §86
-※ sunlight.py의 정북일조 함수를 재사용·통합
+      서울시 건축조례 제25조 (대지안의 공지)
+수치: legal_reference.SETBACK_TABLE / SUNLIGHT_REGULATION 참조
 """
 
 from dataclasses import dataclass
 from typing import Optional
 from .sunlight import calc_north_setback, check_north_setback
+from .legal_reference import SETBACK_TABLE, SUNLIGHT_REGULATION
 
 
 @dataclass
@@ -80,23 +82,36 @@ def check_adjacent_boundary_setback(
     building_height_m: float,
     actual_setback_m: float,
     building_use_str: str = "",
+    zone_type_str: str = "",
+    total_floor_area_m2: float = 0.0,
 ) -> SetbackResult:
     """
-    인접대지경계선 이격 (건축법 시행령 §86③).
-    전용·일반주거지역 정북일조와 별개로,
-    인접대지경계선에서 건물 외벽까지 최소 이격 기준.
-    일반적으로 해당 층 높이의 0.5 이상 (단, 채광창이 없는 경우 0.5m 완화 가능)
+    인접대지경계선 이격 (서울시 건축조례 §25, legal_reference.SETBACK_TABLE).
+    건물 용도·용도지역·연면적에 따라 기준 자동 선택.
     """
-    # 인접대지 이격: 채광창 있는 외벽 기준 → 창 높이의 0.5배 이상 (최소 0.5m)
-    # 채광창 없는 경우 0.5m로 완화 가능
-    required = 0.5   # 채광창 없는 외벽 완화 기준 적용 (실무 기본값)
+    # 기준 선택 로직
+    if "공동주택" in building_use_str or "아파트" in building_use_str or "연립" in building_use_str:
+        if "전용주거" in zone_type_str:
+            rule_key = "공동주택_전용주거지역"
+        else:
+            rule_key = "공동주택_일반준주거지역"
+    elif "단독주택" in building_use_str or "다가구" in building_use_str:
+        rule_key = "단독주택"
+    elif total_floor_area_m2 >= 1000:
+        rule_key = "일반건축물_1000이상"
+    else:
+        rule_key = "그외"
+
+    rule = SETBACK_TABLE[rule_key]
+    required = rule.adjacent_boundary_m
+
     return SetbackResult(
         item="인접대지경계선 이격",
         required_m=round(required, 2),
         actual_m=actual_setback_m,
         pass_=actual_setback_m >= required,
-        basis=f"채광창 없는 외벽: 0.5m 이상 (건축법 시행령 §86③)",
-        note="채광창 있는 외벽은 창 높이의 0.5배 이상 별도 적용 필요",
+        basis=f"{rule_key}: 인접대지 {required}m 이상 (서울시 건축조례 §25)",
+        note=rule.notes,
     )
 
 

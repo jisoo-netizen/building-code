@@ -1,12 +1,19 @@
 """
 주차대수 산정 (용도변경 전·후 비교 포함)
-근거: 주차장법 시행령 별표 1 + 서울시 주차장 조례
+근거: 서울시 주차장 조례 제17조·별표2 / legal_reference.PARKING_TABLE
 """
 
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional
 import math
+
+from .legal_reference import (
+    PARKING_TABLE,
+    SINGLE_HOUSE_PARKING,
+    MULTI_HOUSE_PARKING,
+    get_multi_house_parking_rate,
+)
 
 
 class BuildingUse(str, Enum):
@@ -61,15 +68,21 @@ PARKING_STANDARDS: dict[BuildingUse, ParkingStandard] = {
     ),
     BuildingUse.FIRST_NEIGHBORHOOD: ParkingStandard(
         use=BuildingUse.FIRST_NEIGHBORHOOD,
-        area_per_space=134,
-        area_per_space_seoul=134,   # 서울시 조례 동일 (근생은 강화기준 없음)
-        notes="1종근생: 지상 시설면적 134㎡당 1대 (지하층·주차·계단·화장실 제외)",
+        area_per_space=PARKING_TABLE["제1종근린생활시설"],
+        area_per_space_seoul=PARKING_TABLE["제1종근린생활시설"],
+        notes=(
+            f"1종근생: 시설면적 {PARKING_TABLE['제1종근린생활시설']}㎡당 1대 "
+            "(서울시 주차장조례 별표2 — 지하층·주차·계단·화장실 제외)"
+        ),
     ),
     BuildingUse.SECOND_NEIGHBORHOOD: ParkingStandard(
         use=BuildingUse.SECOND_NEIGHBORHOOD,
-        area_per_space=134,
-        area_per_space_seoul=134,
-        notes="2종근생: 지상 시설면적 134㎡당 1대 (지하층·주차·계단·화장실 제외)",
+        area_per_space=PARKING_TABLE["제2종근린생활시설"],
+        area_per_space_seoul=PARKING_TABLE["제2종근린생활시설"],
+        notes=(
+            f"2종근생: 시설면적 {PARKING_TABLE['제2종근린생활시설']}㎡당 1대 "
+            "(서울시 주차장조례 별표2 — 지하층·주차·계단·화장실 제외)"
+        ),
     ),
     BuildingUse.OFFICE: ParkingStandard(
         use=BuildingUse.OFFICE,
@@ -172,16 +185,13 @@ class ParkingCompareResult:
 
 
 def _multi_family_spaces(inp: ParkingInput) -> tuple[int, str]:
-    """다가구주택 세대별 전용면적 구간 적용 (서울시 주차장 조례)."""
-    if inp.unit_area <= 30:
-        rate = 0.5
-        label = "전용30㎡이하→0.5대/세대"
-    elif inp.unit_area <= 60:
-        rate = 0.8
-        label = "전용30~60㎡→0.8대/세대"
-    else:
-        rate = 1.0
-        label = "전용60㎡초과→1.0대/세대"
+    """다가구주택 세대별 전용면적 구간 적용 (legal_reference.MULTI_HOUSE_PARKING)."""
+    rate = get_multi_house_parking_rate(inp.unit_area)
+    from .legal_reference import MULTI_HOUSE_PARKING as _TIERS
+    label = next(
+        (t.notes for t in _TIERS if inp.unit_area <= t.area_max),
+        f"전용{inp.unit_area}㎡→{rate}대/세대"
+    )
     spaces = math.ceil(inp.units * rate)
     return spaces, f"{inp.units}세대 × {rate}대/세대 ({label}) = {spaces}대"
 
